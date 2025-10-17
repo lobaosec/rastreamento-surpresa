@@ -31,28 +31,71 @@ export default function TrackingPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName, setUserName] = useState('')
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    // Verificar se usuário está logado
-    const email = localStorage.getItem('userEmail')
-    const name = localStorage.getItem('userName')
-    const savedCode = localStorage.getItem('trackingCode')
-    
-    if (!email) {
-      router.push('/login')
-      return
+    // Verificação robusta de autenticação
+    const checkAuthentication = () => {
+      // Verificar se há usuários registrados no sistema
+      const users = localStorage.getItem('users')
+      if (!users) {
+        // Se não há usuários registrados, redirecionar para página principal
+        router.push('/')
+        return
+      }
+
+      const registeredUsers = JSON.parse(users)
+      
+      // Verificar se há um usuário logado atualmente
+      const currentUserEmail = localStorage.getItem('currentUserEmail')
+      if (!currentUserEmail) {
+        // Se não há usuário logado, redirecionar para página principal
+        router.push('/')
+        return
+      }
+
+      // Verificar se o usuário logado realmente existe na base de dados
+      const userExists = registeredUsers.some((user: any) => user.email === currentUserEmail)
+      
+      if (!userExists) {
+        // Se o usuário não existe na base de dados, limpar e redirecionar
+        localStorage.removeItem('currentUserEmail')
+        localStorage.removeItem('currentUserName')
+        router.push('/')
+        return
+      }
+
+      // Buscar dados do usuário
+      const currentUser = registeredUsers.find((user: any) => user.email === currentUserEmail)
+      
+      // Usuário autenticado com sucesso
+      setIsAuthenticated(true)
+      setUserEmail(currentUserEmail)
+      setUserName(currentUser?.name || '')
+      
+      const savedCode = localStorage.getItem('trackingCode')
+      if (savedCode) {
+        setTrackingCode(savedCode)
+        // Auto-rastrear o código salvo
+        handleTrack(savedCode)
+      }
     }
-    
-    setUserEmail(email)
-    setUserName(name || '')
-    
-    if (savedCode) {
-      setTrackingCode(savedCode)
-      // Auto-rastrear o código salvo
-      handleTrack(savedCode)
-    }
+
+    checkAuthentication()
   }, [router])
+
+  // Não renderizar nada até verificar autenticação
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lime-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Verificando autenticación...</p>
+        </div>
+      </div>
+    )
+  }
 
   // Definir as 9 etapas específicas solicitadas
   const getTrackingSteps = (createdAt: Date, hoursSinceCreated: number): TrackingStep[] => {
@@ -181,11 +224,12 @@ export default function TrackingPage() {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('userEmail')
-    localStorage.removeItem('userName')
+    localStorage.removeItem('currentUserEmail')
+    localStorage.removeItem('currentUserName')
     localStorage.removeItem('trackingCode')
     localStorage.removeItem('orderCreatedAt')
-    router.push('/login')
+    setIsAuthenticated(false)
+    router.push('/')
   }
 
   // Função para determinar quais etapas mostrar

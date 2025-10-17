@@ -2,7 +2,15 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, Lock, Package, User, ArrowRight } from 'lucide-react'
+import { Mail, Lock, Package, User, ArrowRight, AlertCircle } from 'lucide-react'
+
+interface UserData {
+  email: string
+  password: string
+  name: string
+  trackingCode: string
+  createdAt: string
+}
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -11,6 +19,7 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [trackingCode, setTrackingCode] = useState('')
+  const [error, setError] = useState('')
   const router = useRouter()
 
   const generateTrackingCode = (): string => {
@@ -25,27 +34,105 @@ export default function LoginPage() {
     return prefix + result
   }
 
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const validatePassword = (password: string): boolean => {
+    // Senha deve ter pelo menos 6 caracteres
+    return password.length >= 6
+  }
+
+  const getStoredUsers = (): UserData[] => {
+    const users = localStorage.getItem('registeredUsers')
+    return users ? JSON.parse(users) : []
+  }
+
+  const saveUser = (userData: UserData) => {
+    const users = getStoredUsers()
+    users.push(userData)
+    localStorage.setItem('registeredUsers', JSON.stringify(users))
+  }
+
+  const findUser = (email: string, password: string): UserData | null => {
+    const users = getStoredUsers()
+    return users.find(user => user.email === email && user.password === password) || null
+  }
+
+  const emailExists = (email: string): boolean => {
+    const users = getStoredUsers()
+    return users.some(user => user.email === email)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError('')
 
-    // Simular delay de autenticación
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // Validações básicas
+    if (!validateEmail(email)) {
+      setError('Por favor, ingresa un email válido')
+      setIsLoading(false)
+      return
+    }
+
+    if (!validatePassword(password)) {
+      setError('La contraseña debe tener al menos 6 caracteres')
+      setIsLoading(false)
+      return
+    }
+
+    // Simular delay de autenticação
+    await new Promise(resolve => setTimeout(resolve, 1500))
 
     if (isLogin) {
-      // Login - redirecionar para rastreamento
-      localStorage.setItem('userEmail', email)
-      router.push('/tracking')
+      // LOGIN - Verificar credenciais
+      const user = findUser(email, password)
+      
+      if (user) {
+        // Login bem-sucedido
+        localStorage.setItem('userEmail', email)
+        localStorage.setItem('userName', user.name)
+        localStorage.setItem('trackingCode', user.trackingCode)
+        localStorage.setItem('orderCreatedAt', user.createdAt)
+        router.push('/tracking')
+      } else {
+        // Credenciais inválidas
+        setError('Email o contraseña inválidos')
+      }
     } else {
-      // Registro - gerar código e mostrar
+      // REGISTRO - Criar nova conta
+      if (!name.trim()) {
+        setError('Por favor, ingresa tu nombre completo')
+        setIsLoading(false)
+        return
+      }
+
+      if (emailExists(email)) {
+        setError('Este email ya está registrado. Intenta iniciar sesión.')
+        setIsLoading(false)
+        return
+      }
+
+      // Criar nova conta
       const newCode = generateTrackingCode()
+      const newUser: UserData = {
+        email,
+        password,
+        name: name.trim(),
+        trackingCode: newCode,
+        createdAt: new Date().toISOString()
+      }
+
+      saveUser(newUser)
       setTrackingCode(newCode)
       
-      // Salvar dados do usuário
+      // Salvar dados da sessão atual
       localStorage.setItem('userEmail', email)
-      localStorage.setItem('userName', name)
+      localStorage.setItem('userName', name.trim())
       localStorage.setItem('trackingCode', newCode)
-      localStorage.setItem('orderCreatedAt', new Date().toISOString())
+      localStorage.setItem('orderCreatedAt', newUser.createdAt)
     }
 
     setIsLoading(false)
@@ -135,6 +222,16 @@ export default function LoginPage() {
 
         {/* Login/Register Form */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             {!isLogin && (
               <div>
@@ -187,7 +284,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 focus:border-transparent transition-all"
-                  placeholder="Ingresa tu contraseña"
+                  placeholder={isLogin ? "Ingresa tu contraseña" : "Mínimo 6 caracteres"}
                 />
               </div>
             </div>
@@ -200,7 +297,7 @@ export default function LoginPage() {
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>{isLogin ? 'Ingresando...' : 'Creando cuenta...'}</span>
+                  <span>{isLogin ? 'Verificando...' : 'Creando cuenta...'}</span>
                 </>
               ) : (
                 <>
@@ -216,7 +313,13 @@ export default function LoginPage() {
             <p className="text-slate-600">
               {isLogin ? '¿No tienes una cuenta?' : '¿Ya tienes una cuenta?'}
               <button
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  setIsLogin(!isLogin)
+                  setError('')
+                  setEmail('')
+                  setPassword('')
+                  setName('')
+                }}
                 className="ml-2 text-blue-900 hover:text-blue-700 font-semibold transition-colors"
               >
                 {isLogin ? 'Crear cuenta' : 'Iniciar sesión'}
@@ -233,8 +336,8 @@ export default function LoginPage() {
               <h3 className="text-sm font-semibold text-blue-900">¿Cómo funciona?</h3>
               <p className="text-xs text-blue-700 mt-1">
                 {isLogin 
-                  ? 'Inicia sesión para acceder al rastreo de tus pedidos existentes.'
-                  : 'Al crear tu cuenta, recibirás un código único para rastrear tu pedido en tiempo real.'
+                  ? 'Inicia sesión con tu email y contraseña para acceder al rastreo de tus pedidos existentes.'
+                  : 'Al crear tu cuenta con email y contraseña válidos, recibirás un código único para rastrear tu pedido en tiempo real.'
                 }
               </p>
             </div>
