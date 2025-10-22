@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "install:clean": "npm install --no-fund --silent"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.1.0",

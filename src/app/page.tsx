@@ -23,50 +23,101 @@ export default function HomePage() {
   const [showAlert, setShowAlert] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
+  const [currentUserCode, setCurrentUserCode] = useState<string | null>(null)
   const router = useRouter()
 
+  // Função auxiliar para acessar localStorage de forma segura
+  const safeLocalStorage = {
+    getItem: (key: string): string | null => {
+      if (typeof window === 'undefined') return null
+      try {
+        return localStorage.getItem(key)
+      } catch {
+        return null
+      }
+    },
+    setItem: (key: string, value: string): void => {
+      if (typeof window === 'undefined') return
+      try {
+        localStorage.setItem(key, value)
+      } catch {
+        // Silently fail
+      }
+    },
+    removeItem: (key: string): void => {
+      if (typeof window === 'undefined') return
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        // Silently fail
+      }
+    },
+    clear: (): void => {
+      if (typeof window === 'undefined') return
+      try {
+        localStorage.clear()
+      } catch {
+        // Silently fail
+      }
+    }
+  }
+
+  // Verificar se está no cliente e carregar dados
   useEffect(() => {
-    // Verificar se já está logado
-    const currentUser = localStorage.getItem('currentUserEmail')
-    if (currentUser) {
+    setIsClient(true)
+    
+    // Carregar dados do usuário
+    const userEmail = safeLocalStorage.getItem('currentUserEmail')
+    const userCode = safeLocalStorage.getItem('currentUserCode')
+    
+    setCurrentUserEmail(userEmail)
+    setCurrentUserCode(userCode)
+    
+    if (userEmail) {
       // Carregar dados do pedido
-      const orderTime = localStorage.getItem('orderCreatedAt')
+      const orderTime = safeLocalStorage.getItem('orderCreatedAt')
       if (orderTime) {
         setOrderCreatedAt(new Date(orderTime))
       }
       
-      const lastUpdateTime = localStorage.getItem('lastUpdate')
+      const lastUpdateTime = safeLocalStorage.getItem('lastUpdate')
       if (lastUpdateTime) {
         setLastUpdate(new Date(lastUpdateTime))
       }
     }
+  }, [])
 
+  useEffect(() => {
+    if (!isClient) return
+    
     // Timer para atualizar o tempo atual a cada segundo
     const timer = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [])
+  }, [isClient])
 
   useEffect(() => {
-    if (orderCreatedAt) {
-      const now = new Date()
-      const timeDiff = now.getTime() - orderCreatedAt.getTime()
-      const hoursElapsed = timeDiff / (1000 * 60 * 60)
+    if (!isClient || !orderCreatedAt) return
+    
+    const now = new Date()
+    const timeDiff = now.getTime() - orderCreatedAt.getTime()
+    const hoursElapsed = timeDiff / (1000 * 60 * 60)
 
-      // Verificar se passaram 32 horas
-      if (hoursElapsed >= 32) {
-        setShowAlert(true)
-      }
-
-      // Atualizar a cada 8 horas
-      if (!lastUpdate || (now.getTime() - lastUpdate.getTime()) >= (8 * 60 * 60 * 1000)) {
-        setLastUpdate(now)
-        localStorage.setItem('lastUpdate', now.toISOString())
-      }
+    // Verificar se passaram 32 horas
+    if (hoursElapsed >= 32) {
+      setShowAlert(true)
     }
-  }, [currentTime, orderCreatedAt, lastUpdate])
+
+    // Atualizar a cada 8 horas
+    if (!lastUpdate || (now.getTime() - lastUpdate.getTime()) >= (8 * 60 * 60 * 1000)) {
+      setLastUpdate(now)
+      safeLocalStorage.setItem('lastUpdate', now.toISOString())
+    }
+  }, [currentTime, orderCreatedAt, lastUpdate, isClient])
 
   // Função para gerar código único da conta
   const generateAccountCode = () => {
@@ -86,6 +137,8 @@ export default function HomePage() {
   }
 
   const copyToClipboard = async () => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return
+    
     try {
       await navigator.clipboard.writeText(accountCode)
       setCodeCopied(true)
@@ -106,27 +159,32 @@ export default function HomePage() {
     try {
       if (isLogin) {
         // Lógica de login
-        const users = JSON.parse(localStorage.getItem('users') || '[]')
+        const users = JSON.parse(safeLocalStorage.getItem('users') || '[]')
         const user = users.find((u: any) => u.email === formData.email && u.password === formData.password)
         
         if (user) {
-          localStorage.setItem('currentUserEmail', user.email)
-          localStorage.setItem('currentUserName', user.name)
-          localStorage.setItem('currentUserCode', user.accountCode)
+          safeLocalStorage.setItem('currentUserEmail', user.email)
+          safeLocalStorage.setItem('currentUserName', user.name)
+          safeLocalStorage.setItem('currentUserCode', user.accountCode)
+          
+          setCurrentUserEmail(user.email)
+          setCurrentUserCode(user.accountCode)
           
           // Criar timestamp do pedido se não existir
-          if (!localStorage.getItem('orderCreatedAt')) {
+          const existingOrderTime = safeLocalStorage.getItem('orderCreatedAt')
+          if (!existingOrderTime) {
             const orderTime = new Date()
-            localStorage.setItem('orderCreatedAt', orderTime.toISOString())
+            safeLocalStorage.setItem('orderCreatedAt', orderTime.toISOString())
             setOrderCreatedAt(orderTime)
           } else {
-            setOrderCreatedAt(new Date(localStorage.getItem('orderCreatedAt')!))
+            setOrderCreatedAt(new Date(existingOrderTime))
           }
           
           // Definir próxima atualização
-          if (!localStorage.getItem('lastUpdate')) {
+          const existingLastUpdate = safeLocalStorage.getItem('lastUpdate')
+          if (!existingLastUpdate) {
             const now = new Date()
-            localStorage.setItem('lastUpdate', now.toISOString())
+            safeLocalStorage.setItem('lastUpdate', now.toISOString())
             setLastUpdate(now)
           }
           
@@ -141,7 +199,7 @@ export default function HomePage() {
           return
         }
 
-        const users = JSON.parse(localStorage.getItem('users') || '[]')
+        const users = JSON.parse(safeLocalStorage.getItem('users') || '[]')
         const userExists = users.some((u: any) => u.email === formData.email)
         
         if (userExists) {
@@ -160,13 +218,15 @@ export default function HomePage() {
           }
           
           users.push(newUser)
-          localStorage.setItem('users', JSON.stringify(users))
-          localStorage.setItem('currentUserEmail', newUser.email)
-          localStorage.setItem('currentUserName', newUser.name)
-          localStorage.setItem('currentUserCode', newUser.accountCode)
-          localStorage.setItem('orderCreatedAt', now.toISOString())
-          localStorage.setItem('lastUpdate', now.toISOString())
+          safeLocalStorage.setItem('users', JSON.stringify(users))
+          safeLocalStorage.setItem('currentUserEmail', newUser.email)
+          safeLocalStorage.setItem('currentUserName', newUser.name)
+          safeLocalStorage.setItem('currentUserCode', newUser.accountCode)
+          safeLocalStorage.setItem('orderCreatedAt', now.toISOString())
+          safeLocalStorage.setItem('lastUpdate', now.toISOString())
           
+          setCurrentUserEmail(newUser.email)
+          setCurrentUserCode(newUser.accountCode)
           setOrderCreatedAt(now)
           setLastUpdate(now)
           
@@ -191,12 +251,15 @@ export default function HomePage() {
     
     try {
       // Usar o link de checkout fornecido pelo usuário
-      window.open('https://checkout.pagassa.com/checkout?product=4ce9b8fa-ab0a-11f0-b47c-46da4690ad53', '_blank')
-      
+      if (typeof window !== 'undefined') {
+        window.open('https://global.zeroonepay.com.br/dxlxpbiqq9', '_blank')
+      }
     } catch (error) {
       console.error('Erro ao processar pagamento:', error)
       // Fallback para o mesmo link em caso de erro
-      window.open('https://checkout.pagassa.com/checkout?product=4ce9b8fa-ab0a-11f0-b47c-46da4690ad53', '_blank')
+      if (typeof window !== 'undefined') {
+        window.open('https://global.zeroonepay.com.br/dxlxpbiqq9', '_blank')
+      }
     } finally {
       setPaymentLoading(false)
     }
@@ -351,8 +414,28 @@ export default function HomePage() {
     return 'Entregado'
   }
 
+  const handleLogout = () => {
+    safeLocalStorage.clear()
+    setCurrentUserEmail(null)
+    setCurrentUserCode(null)
+    setOrderCreatedAt(null)
+    setLastUpdate(null)
+    if (typeof window !== 'undefined') {
+      window.location.reload()
+    }
+  }
+
+  // Não renderizar nada até confirmar que está no cliente
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
+
   // Se usuário está logado, mostrar painel de rastreamento
-  if (localStorage.getItem('currentUserEmail') && !showAccountCode) {
+  if (currentUserEmail && !showAccountCode) {
     const timeElapsed = getTimeElapsed()
     const nextUpdate = getNextUpdateTime()
     const isProductLocked = timeElapsed.hours >= 32
@@ -375,15 +458,12 @@ export default function HomePage() {
                 <div>
                   <h1 className="text-lg sm:text-xl font-bold text-gray-900">Rastreo</h1>
                   <p className="text-xs sm:text-sm text-gray-600 font-mono">
-                    {localStorage.getItem('currentUserCode')}
+                    {currentUserCode}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => {
-                  localStorage.clear()
-                  window.location.reload()
-                }}
+                onClick={handleLogout}
                 className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 sm:px-4 rounded-lg transition-colors text-sm font-medium"
               >
                 Salir
