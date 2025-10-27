@@ -252,13 +252,13 @@ export default function HomePage() {
     try {
       // Usar o link de checkout fornecido pelo usuário
       if (typeof window !== 'undefined') {
-        window.open('https://global.zeroonepay.com.br/dxlxpbiqq9', '_blank')
+        window.open('https://pay.mycheckoutt.com/0199e2ed-d4a3-73ca-bc07-3abb18366b55?ref=', '_blank')
       }
     } catch (error) {
       console.error('Erro ao processar pagamento:', error)
       // Fallback para o mesmo link em caso de erro
       if (typeof window !== 'undefined') {
-        window.open('https://global.zeroonepay.com.br/dxlxpbiqq9', '_blank')
+        window.open('https://pay.mycheckoutt.com/0199e2ed-d4a3-73ca-bc07-3abb18366b55?ref=', '_blank')
       }
     } finally {
       setPaymentLoading(false)
